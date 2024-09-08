@@ -68,14 +68,21 @@ class CartService:
 
     @staticmethod
     async def remove_from_cart(session: AsyncSession, user: User, product_id: int, full_remove: bool = False):
-        query = select(Cart).where(Cart.user_id == user.id, Cart.is_active)
+        query = (
+            select(Cart)
+            .where(Cart.user_id == user.id, Cart.is_active)
+            .options(selectinload(Cart.products))
+        )
         cart = await session.execute(query)
         try:
             cart = cart.scalar_one()
         except NoResultFound:
             raise HTTPException(status_code=404, detail="Your cart is empty")
 
-        query = select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id)
+        query = (
+            select(CartItem)
+            .where(CartItem.cart_id == cart.id, CartItem.product_id == product_id)
+        )
         cart_item = await session.execute(query)
         try:
             cart_item = cart_item.scalar_one()
@@ -86,6 +93,9 @@ class CartService:
 
         if cart_item.quantity == 0 or full_remove:
             await session.delete(cart_item)
+            await session.refresh(cart)
+            if not cart.products:
+                await session.delete(cart)
 
         try:
             await session.commit()
@@ -153,5 +163,5 @@ class CartService:
             cart_item.product.quantity -= cart_item.quantity
 
         cart.is_active = False
-        await session.commit()
+
         return cart

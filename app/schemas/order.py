@@ -5,11 +5,9 @@ from app.models import OrderStatus, DeliveryType
 
 class OrderBase(BaseModel):
     card_id: int = Field(ge=0)
-    cart_cost: float = Field(ge=0)
     status: OrderStatus = Field(default=OrderStatus.new)
     delivery_type: DeliveryType
     delivery_address: int | None = Field(ge=0)
-    delivery_cost: float = Field(ge=0)
     payment_method_id: int = Field(ge=0)
 
 class OrderCreate(OrderBase):
@@ -19,4 +17,6 @@ class OrderUpdate(OrderBase):
     pass
 
 class OrderRead(OrderBase):
+    cart_cost: float
+    delivery_cost: float
     id: int
