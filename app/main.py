@@ -7,7 +7,10 @@ from app.routers import (
     attribute_value,
     attribute,
     review,
-    payment_method
+    payment_method,
+    cart,
+    order,
+    shipping_address
 )
 
 description = ""
@@ -25,3 +28,6 @@ app.include_router(attribute.router)
 app.include_router(attribute_value.router)
 app.include_router(payment_method.router)
 app.include_router(review.router)
+app.include_router(cart.router)
+app.include_router(order.router)
+app.include_router(shipping_address.router)
