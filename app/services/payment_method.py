@@ -10,6 +10,12 @@ from fastapi import HTTPException
 
 class PaymentMethodService:
     @staticmethod
+    async def get_payment_methods(session: AsyncSession, user: User):
+        query = select(PaymentMethod).where(PaymentMethod.user_id == user.id)
+        payment_methods = await session.execute(query)
+        return payment_methods.scalars().all()
+
+    @staticmethod
     async def create_payment_method(session: AsyncSession, payment_method: PaymentMethodCreate, user: User):
         new_payment_method = PaymentMethod(**payment_method.model_dump() | {'user_id': user.id})
         session.add(new_payment_method)

@@ -9,6 +9,17 @@ from app.utils.common import current_user
 
 router = APIRouter(prefix='/payment_method', tags=['payment_methods'])
 
+@router.get('/')
+async def get_payment_methods(session: AsyncSession = Depends(get_session),
+                              user: User = Depends(current_user())):
+    try:
+        payment_methods = await PaymentMethodService.get_payment_methods(session, user)
+        return payment_methods
+    except HTTPException as e:
+        raise e
+    except:
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
+
 @router.post('/')
 async def create_payment_method(payment_method: PaymentMethodCreate,
                                 session: AsyncSession = Depends(get_session),
