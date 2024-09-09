@@ -207,9 +207,6 @@ class CartItem(Base):
     quantity: Mapped[int]
     history_price: Mapped[float | None]
 
-    cart: Mapped["Cart"] = relationship(back_populates="products")
-    product: Mapped["Product"] = relationship(back_populates="carts")
-
 
 class ProductAttributeValues(Base):
     __tablename__ = "product_attribute_value"
