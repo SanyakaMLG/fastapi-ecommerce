@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models import Product, ProductAttributeValues, AttributeValue
 from app.schemas.product import ProductCreate
+from app.services.category import CategoryService
 from app.utils.common import remap_available_filters
 
 
@@ -54,10 +55,10 @@ class ProductService:
         return product
 
     @staticmethod
-    async def _get_available_filters(session: AsyncSession, category_id: int):
+    async def _get_available_filters(session: AsyncSession, categories: list[int]):
         query = (
             select(Product)
-            .where(Product.category_id == category_id)
+            .where(Product.category_id.in_(categories))
             .options(selectinload(Product.attributes))
         )
         result = await session.execute(query)
@@ -82,9 +83,14 @@ class ProductService:
         if category_id is None:
             return {}
 
+        categories = await CategoryService.get_categories_with_children(session, category_id)
+
+        print(f'{categories=}')
+
         query = (
             select(Product)
-            .where(Product.category_id == category_id)
+            .where(Product.category_id.in_(categories))
+            .options(selectinload(Product.attributes))
         )
         result = await session.execute(query)
         products = result.scalars().all()
@@ -108,17 +114,27 @@ class ProductService:
     async def get_products(session: AsyncSession, category_id: int = None,
                            skip: int = 0, limit: int = 100,
                            filter: dict[int, list[int]] = None):
+        categories = await CategoryService.get_categories_with_children(session, category_id)
         if not filter:
             query = select(Product)
-            if category_id:
-                query = query.where(Product.category_id == category_id)
-            query = query.offset(skip).limit(limit)
+            if categories:
+                query = (
+                    query
+                    .where(Product.category_id.in_(categories))
+                )
+            query = query \
+                .order_by(Product.created_at.desc()) \
+                .offset(skip) \
+                .limit(limit)
             result = await session.execute(query)
-            return result.scalars().all()
+            products = result.scalars().all()
+            available_products = [product for product in products if product.quantity > 0]
+            unavailable_products = [product for product in products if product.quantity == 0]
+            return available_products + unavailable_products
         elif category_id is None:
             raise HTTPException(status_code=400, detail="Category ID is required for filtering")
 
-        available_filters = await ProductService._get_available_filters(session, category_id)
+        available_filters = await ProductService._get_available_filters(session, categories)
         for attribute_id, values in filter.items():
             if attribute_id not in available_filters:
                 raise HTTPException(status_code=400, detail="Invalid filter")
@@ -128,7 +144,7 @@ class ProductService:
 
         query = (
                 select(Product)
-                .where(Product.category_id == category_id)
+                .where(Product.category_id.in_(categories))
                 .join(ProductAttributeValues,
                       Product.id == ProductAttributeValues.product_id)
                 .join(AttributeValue,
@@ -153,10 +169,20 @@ class ProductService:
             conditions.append(or_(*subconditions))
 
         if conditions:
-            query = query.where(and_(*conditions)).offset(skip).limit(limit)
+            query = query.where(and_(*conditions))
+
+        query = (
+            query
+            .order_by(Product.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
 
         result = await session.execute(query)
-        return result.scalars().all()
+        products = result.scalars().all()
+        available_products = [product for product in products if product.quantity > 0]
+        unavailable_products = [product for product in products if product.quantity == 0]
+        return available_products + unavailable_products
 
     @staticmethod
     async def update_product(session: AsyncSession, product_id: int, product_update: ProductCreate):

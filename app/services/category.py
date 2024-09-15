@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy import select, insert, Result
 from sqlalchemy.exc import NoResultFound, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, lazyload
 
 from app.models import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate
@@ -47,3 +48,18 @@ class CategoryService:
             await session.rollback()
             raise HTTPException(status_code=500, detail="An unexpected error occurred")
         return category
+
+    @staticmethod
+    async def get_categories_with_children(session: AsyncSession, category_id: int) -> list[int]:
+        async def get_all_children_ids(category_id: int) -> list[int]:
+            stmt = select(Category).filter_by(parent_id=category_id)
+            result = await session.execute(stmt)
+            categories = result.scalars().all()
+            ids = [c.id for c in categories]
+            for category in categories:
+                ids.extend(await get_all_children_ids(category.id))
+            return ids
+
+        result_ids = [category_id]
+        result_ids.extend(await get_all_children_ids(category_id))
+        return result_ids

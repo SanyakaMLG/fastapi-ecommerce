@@ -67,7 +67,7 @@ class Product(Base):
     reviews: Mapped[Optional[list["Review"]]] = relationship(back_populates="product")
 
 
-class Category(Base, JSONEncoder):
+class Category(Base):
     __tablename__ = "category"
 
     id = Column(Integer, primary_key=True)
@@ -78,9 +78,6 @@ class Category(Base, JSONEncoder):
 
     products: Mapped[Optional[list["Product"]]] = relationship(back_populates="category")
     parent: Mapped[Optional["Category"]] = relationship(backref="children", remote_side=[id])
-
-    def default(self, o):
-        return o.__dict__
 
 
 class Cart(Base):
