@@ -10,6 +10,14 @@ from fastapi import HTTPException
 class ReviewService:
     @staticmethod
     async def create_review(session: AsyncSession, review: ReviewCreate, user: User):
+        product_id = review.product_id
+        query = select(Review).where(Review.product_id == product_id, Review.user_id == user.id)
+        result = await session.execute(query)
+        try:
+            result.scalar_one()
+            raise HTTPException(status_code=400, detail="You have already reviewed this product")
+        except NoResultFound:
+            pass
         new_review = Review(**review.model_dump())
         new_review.user_id = user.id
         session.add(new_review)

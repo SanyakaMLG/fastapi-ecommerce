@@ -10,7 +10,7 @@ router = APIRouter(prefix='/cart', tags=['carts'])
 
 @router.get('/my_cart')
 async def get_cart(session: AsyncSession = Depends(get_session), user: User = Depends(current_user())):
-    return CartService.get_cart(session, user)
+    return await CartService.get_cart(session, user)
 
 @router.post('/add_to_cart')
 async def add_to_cart(product_id: int,

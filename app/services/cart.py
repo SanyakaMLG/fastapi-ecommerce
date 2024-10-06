@@ -10,9 +10,9 @@ from app.models import User, Cart, CartItem, Product
 class CartService:
     @staticmethod
     async def get_cart(session: AsyncSession, user: User):
-        query = select(Cart).where(Cart.user_id == user.id).options(selectinload(Cart.products))
+        query = select(Cart).where(Cart.user_id == user.id, Cart.is_active).options(selectinload(Cart.products))
         cart = await session.execute(query)
-        return cart.scalars().all()
+        return cart.scalar_one_or_none()
 
     @staticmethod
     async def add_to_cart(session: AsyncSession, user: User, product_id: int):
@@ -27,7 +27,7 @@ class CartService:
         if max_quantity == 0:
             raise HTTPException(status_code=400, detail="Product is out of stock")
 
-        query = select(Cart).where(Cart.user_id == user.id)
+        query = select(Cart).where(Cart.user_id == user.id, Cart.is_active)
         cart = await session.execute(query)
         try:
             cart = cart.scalar_one()
@@ -94,7 +94,7 @@ class CartService:
         if cart_item.quantity == 0 or full_remove:
             await session.delete(cart_item)
             await session.refresh(cart)
-            if not cart.products:
+            if len(cart.products) == 1:
                 await session.delete(cart)
 
         try:
@@ -113,6 +113,7 @@ class CartService:
         query = (
             select(Cart)
             .where(Cart.user_id == user.id, Cart.is_active)
+            .options(selectinload(Cart.products))
         )
         cart = await session.execute(query)
         try:
@@ -120,47 +121,55 @@ class CartService:
         except NoResultFound:
             raise HTTPException(status_code=404, detail="Your cart is empty")
 
+        products = cart.products
+
         query = (
             select(CartItem)
             .where(CartItem.cart_id == cart.id)
-            .options(selectinload(CartItem.product))
         )
         cart_items = await session.execute(query)
         cart_items = cart_items.scalars().all()
 
         sold_products = []
         for cart_item in cart_items:
-            if cart_item.quantity > cart_item.product.quantity:
-                cart_item.quantity = cart_item.product.quantity
-                sold_products.append(cart_item.product.title)
+            product = next(filter(lambda x: x.id == cart_item.product_id, products))
+            if cart_item.quantity > product.quantity:
+                cart_item.quantity = product.quantity
+                sold_products.append(product.title)
 
         if sold_products:
+            await session.commit()
             raise HTTPException(
                 status_code=400,
                 detail=f"Products {', '.join(sold_products)} are out of stock. Quantity has been updated"
             )
 
-        return cart_items
+        return cart_items, products
 
     @staticmethod
     async def after_order(session: AsyncSession, user: User):
         query = (
             select(Cart)
             .where(Cart.user_id == user.id, Cart.is_active)
+            .options(selectinload(Cart.products))
         )
         cart = await session.execute(query)
         cart = cart.scalar_one()
 
+        products = cart.products
+
         query = (
             select(CartItem)
             .where(CartItem.cart_id == cart.id)
-            .options(selectinload(CartItem.product))
         )
         cart_items = await session.execute(query)
 
         for cart_item in cart_items.scalars().all():
-            cart_item.history_price = cart_item.product.price
-            cart_item.product.quantity -= cart_item.quantity
+            product = next(filter(lambda x: x.id == cart_item.product_id, products))
+            cart_item.history_price = product.price * (1 - product.discount / 100)
+            product.quantity -= cart_item.quantity
+            session.add(product)
+            await session.refresh(product)
 
         cart.is_active = False
 

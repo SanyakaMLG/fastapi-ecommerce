@@ -1,17 +1,20 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from app.models import OrderStatus, DeliveryType
 
 
-class OrderBase(BaseModel):
-    cart_id: int = Field(ge=0)
-    status: OrderStatus = Field(default=OrderStatus.new)
+class OrderCreate(BaseModel):
     delivery_type: DeliveryType
-    delivery_address: int | None = Field(ge=0)
+    delivery_address: Optional[int] = Field(ge=0, default=None)
     payment_method_id: int = Field(ge=0)
 
-class OrderCreate(OrderBase):
-    pass
+
+class OrderBase(OrderCreate):
+    status: OrderStatus = Field(default=OrderStatus.new)
+    cart_id: int = Field(ge=0)
+
 
 class OrderRead(OrderBase):
     cart_cost: float

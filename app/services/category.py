@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy import select, insert, Result
+from sqlalchemy import select, insert, Result, text
 from sqlalchemy.exc import NoResultFound, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, lazyload
@@ -63,3 +63,26 @@ class CategoryService:
         result_ids = [category_id]
         result_ids.extend(await get_all_children_ids(category_id))
         return result_ids
+
+    @staticmethod
+    def build_category_tree(categories: list[Category]):
+        category_dict = {category.id: {"id": category.id, "title": category.title, "children": []} for category in
+                         categories}
+
+        root_categories = []
+
+        for category in categories:
+            if category.parent_id is None:
+                root_categories.append(category_dict[category.id])
+            else:
+                parent = category_dict[category.parent_id]
+                parent["children"].append(category_dict[category.id])
+
+        return root_categories
+
+    @staticmethod
+    async def get_categories_tree(session: AsyncSession):
+        query = select(Category)
+        categories = await session.execute(query)
+        categories = categories.scalars().all()
+        return CategoryService.build_category_tree(categories)

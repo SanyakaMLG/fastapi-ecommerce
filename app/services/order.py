@@ -6,7 +6,7 @@ from sqlalchemy.exc import NoResultFound, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Cart, CartItem, Order, OrderStatus
+from app.models import User, Cart, CartItem, Order, OrderStatus, PaymentMethod
 from app.schemas.order import OrderCreate
 from app.services.cart import CartService
 
@@ -14,11 +14,26 @@ from app.services.cart import CartService
 class OrderService:
     @staticmethod
     async def create_order(session: AsyncSession, user: User, order_in: OrderCreate):
-        cart_items = await CartService.before_order(session, user)
+        active_cart = await CartService.get_cart(session, user)
+        if not active_cart:
+            raise HTTPException(status_code=400, detail="You don't have any items in your cart for create order")
+
+        payment_method = select(PaymentMethod).where(PaymentMethod.id == order_in.payment_method_id)
+        payment_method = await session.execute(payment_method)
+        try:
+            payment_method = payment_method.scalar_one()
+        except NoResultFound:
+            raise HTTPException(status_code=404, detail="Payment method not found")
+
+        if payment_method.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Permission denied")
+
+        cart_items, products = await CartService.before_order(session, user)
 
         cart_cost = 0
         for cart_item in cart_items:
-            cart_cost += cart_item.product.price * cart_item.quantity
+            product = next(filter(lambda x: x.id == cart_item.product_id, products))
+            cart_cost += product.price * cart_item.quantity * (1 - product.discount / 100)
 
         order_params = order_in.model_dump()
 
@@ -27,8 +42,10 @@ class OrderService:
 
         order = Order(
             **order_params,
+            status=OrderStatus.new,
+            cart_id=active_cart.id,
             cart_cost=cart_cost,
-            delivery_cost=random.randint(150, 300)
+            delivery_cost=random.randint(150, 300) if order_params['delivery_type'] == 'delivery' else 0
         )
 
         session.add(order)
@@ -51,9 +68,11 @@ class OrderService:
         query = (
             select(Cart)
             .where(Cart.user_id == user.id, Cart.is_active == False)
-            .options(selectinload(Cart.order),
-                     selectinload(Cart.order.shipping_address),
-                     selectinload(Cart.order.payment_method))
+            .options(selectinload(Cart.order).
+                     selectinload(Order.shipping_address),
+                     selectinload(Cart.order).
+                     selectinload(Order.payment_method),
+                     selectinload(Cart.products))
             .order_by(Cart.created_at.desc())
         )
         orders = await session.execute(query)
@@ -65,8 +84,7 @@ class OrderService:
 
             query = (
                 select(CartItem)
-                .where(CartItem.id == order.id)
-                .options(selectinload(CartItem.product))
+                .where(CartItem.cart_id == order.id)
             )
             cart_items = await session.execute(query)
             cart_items = cart_items.scalars().all()
@@ -79,11 +97,12 @@ class OrderService:
             dict_order['total_cost'] = order.order.cart_cost + order.order.delivery_cost
             dict_order['created_at'] = order.order.created_at
             dict_order['products'] = []
-            for product in cart_items:
+            for cart_item in cart_items:
+                product = next(filter(lambda x: x.id == cart_item.product_id, order.products))
                 dict_product = {
-                    'product_name': product.product.title,
-                    'quantity': product.quantity,
-                    'price': product.history_price
+                    'product_name': product.title,
+                    'quantity': cart_item.quantity,
+                    'price': cart_item.history_price
                 }
                 dict_order['products'].append(dict_product)
 

@@ -1,11 +1,10 @@
 import enum
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Generic
 
-from fastapi_users.db import SQLAlchemyBaseUserTable
+from fastapi_users.models import ID
 from sqlalchemy import String, ForeignKey, Boolean, Column, Integer
 from sqlalchemy.sql.expression import text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from json import JSONEncoder
 
 from app.database import Base
 
@@ -14,7 +13,7 @@ intpk = Annotated[int, mapped_column(primary_key=True)]
 str_255 = Annotated[str, 255]
 
 
-class User(SQLAlchemyBaseUserTable[int], Base):
+class User(Base, Generic[ID]):
     __tablename__ = "user"
 
     id: Mapped[intpk]
@@ -32,7 +31,7 @@ class User(SQLAlchemyBaseUserTable[int], Base):
         Boolean, default=False, nullable=False
     )
 
-    phone: Mapped[str] = mapped_column(String(20), unique=True)
+    phone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     first_name: Mapped[str_255]
     last_name: Mapped[str_255]
     middle_name: Mapped[str_255 | None]
@@ -47,7 +46,7 @@ class Product(Base):
     __tablename__ = "product"
 
     id: Mapped[intpk]
-    title: Mapped[str_255]
+    title: Mapped[str_255] = mapped_column(index=True)
     description: Mapped[str_255 | None]
     price: Mapped[float]
     discount: Mapped[float | None]
@@ -77,7 +76,8 @@ class Category(Base):
     )
 
     products: Mapped[Optional[list["Product"]]] = relationship(back_populates="category")
-    parent: Mapped[Optional["Category"]] = relationship(backref="children", remote_side=[id])
+    parent: Mapped[Optional["Category"]] = relationship("Category", back_populates="children", remote_side=[id])
+    children: Mapped[Optional[list["Category"]]] = relationship("Category", back_populates="parent")
 
 
 class Cart(Base):
@@ -100,6 +100,7 @@ class OrderStatus(enum.Enum):
     shipped = "shipped"
     delivered = "delivered"
     canceled = "canceled"
+    completed = "completed"
 
 
 class DeliveryType(enum.Enum):

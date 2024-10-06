@@ -4,7 +4,7 @@ from app.services.manager import get_user_manager
 from app.services.auth import auth_backend
 
 
-fastapi_users= FastAPIUsers[User, int](
+fastapi_users = FastAPIUsers[User, int](
     get_user_manager,
     [auth_backend],
 )

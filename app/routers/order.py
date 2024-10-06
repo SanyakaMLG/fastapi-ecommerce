@@ -16,8 +16,6 @@ async def get_orders(session: AsyncSession = Depends(get_session), user: User = 
         return orders
     except HTTPException as e:
         raise e
-    except:
-        raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 @router.post('/create_order')
 async def create_order(order_create: OrderCreate,
@@ -28,8 +26,6 @@ async def create_order(order_create: OrderCreate,
         return order
     except HTTPException as e:
         raise e
-    except:
-        raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 @router.post('/cancel_order')
 async def cancel_order(order_id: int,

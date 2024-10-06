@@ -14,16 +14,11 @@ DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{D
 engine = create_async_engine(DATABASE_URL, echo='debug')
 
 created_at = Annotated[datetime, mapped_column(server_default=text("TIMEZONE('utc', now())"))]
-updated_at = Annotated[datetime, mapped_column(
-        server_default=text("TIMEZONE('utc', now())"),
-        server_onupdate=text("TIMEZONE('utc', now())"),
-    )]
 
 
 # Create database tables based on the defined SQLAlchemy models (subclasses of the Base class)
 class Base(DeclarativeBase):
     created_at: Mapped[created_at]
-    updated_at: Mapped[updated_at]
 
 
 # Connect to the database and provide a session for interacting with it
